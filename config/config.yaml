@@ -1,0 +1,164 @@
+# =========================================================
+# EquiRisk — config.yaml
+# Central place for paths, params, and settings.
+# Secrets (keys/passwords) do NOT go here — see .env instead.
+# =========================================================
+
+project:
+  name: EquiRisk
+  environment: dev          # dev | prod
+
+# ---------------------------------------------------------
+# AWS / S3 — single source of truth, no local persistence
+# ---------------------------------------------------------
+s3:
+  bucket: equirisk-data              # <-- change to your actual bucket name
+  region: ap-south-1
+
+  # Key prefixes (folders) within the bucket
+  #
+  # The three "processed_*" prefixes form a strict chain -- each ETL stage
+  # reads one and writes the NEXT one. No stage ever reads and overwrites
+  # the same path: Spark evaluates lazily, so an in-place overwrite can
+  # delete the input directory before the read has materialised.
+  #
+  #   clean_transform      raw_prices + raw_news -> processed_base
+  #   sentiment            processed_base        -> processed_sentiment
+  #   feature_engineering  processed_sentiment   -> processed_features
+  #
+  # processed_features is the final table consumed by ML + RAG + dashboard.
+  paths:
+    raw_prices: raw/prices/          # s3://<bucket>/raw/prices/{ticker}/{date}.parquet
+    raw_news: raw/news/              # s3://<bucket>/raw/news/{ticker}/{date}.json
+    processed_base: processed/base/           # partitioned parquet, partition=ticker
+    processed_sentiment: processed/sentiment/ # partitioned parquet, partition=ticker
+    processed_features: processed/features/   # partitioned parquet, partition=ticker
+    models: models/                  # models/risk_model_v{n}/model.pkl
+    vectorstore: vectorstore/        # vectorstore/{ticker}/index.faiss
+    logs: logs/pipeline/
+
+# ---------------------------------------------------------
+# Tickers
+# ---------------------------------------------------------
+tickers:
+  master_list_path: config/nifty150_midcap.csv   # local, versioned metadata file
+  suffix: ".NS"                                    # yfinance NSE suffix
+
+# ---------------------------------------------------------
+# Ingestion
+# ---------------------------------------------------------
+ingestion:
+  price_history_years: 5
+  news:
+    # Google News RSS 'when:Nd' bound. No API key and no daily quota, so
+    # this is a relevance choice rather than a plan limit -- beyond ~30 days
+    # the feed mostly returns syndicated repeats of the same stories.
+    lookback_days: 30
+    articles_per_ticker: 20
+
+# ---------------------------------------------------------
+# ETL / Spark
+# ---------------------------------------------------------
+spark:
+  app_name: EquiRiskETL
+  master: "local[*]"
+  shuffle_partitions: 8
+  s3_endpoint: null          # leave null unless using a non-AWS S3-compatible store
+
+  # Memory sizing. In local[*] mode the driver JVM does all the work and
+  # the executor setting is ignored, so driver_memory is the one that
+  # matters. Defaults are tuned for an 8GB laptop: 2GB leaves room for
+  # the OS, a browser, and the ~1.5-2GB that torch/sentence-transformers
+  # takes when the RAG stage loads the embedding model.
+  # On 16GB+ you can raise driver_memory to 4g.
+  driver_memory: 1500m
+  driver_max_result_size: 512m
+
+feature_engineering:
+  rolling_windows_days: [20, 60, 90]
+  technical_indicators: [rsi, macd, moving_average]
+
+# ---------------------------------------------------------
+# ML
+# ---------------------------------------------------------
+ml:
+  risk_label:
+    type: classification      # classification | regression
+    horizon_days: 30
+    buckets: [Low, Medium, High]
+
+    # How the buckets are defined:
+    #
+    #   cross_sectional  rank against the other tickers on the SAME date.
+    #                    "Is this stock among the riskier third of the
+    #                    universe next month?" Relative volatility is a
+    #                    persistent stock characteristic, so this is far more
+    #                    learnable, and classes stay balanced in every period
+    #                    by construction.
+    #
+    #   absolute         fixed thresholds fitted on the training period.
+    #                    "Will realised volatility exceed 0.023?" Dominated by
+    #                    market regime, which daily technicals cannot forecast.
+    #
+    # Both are implemented; switching between them and reporting the gap is a
+    # useful comparison in its own right.
+    mode: cross_sectional
+
+  # Fraction of the TIMELINE held out for testing, not a random fraction
+  # of rows. The split is chronological: the earliest 80% of dates train,
+  # the latest 20% test. A random split would put adjacent trading days
+  # on both sides -- and since the label looks 30 days forward and the
+  # features are rolling windows, that leaks future information into
+  # training and inflates the reported score.
+  train_test_split: 0.2
+
+  # Gap (in trading days) dropped between the train and test periods so
+  # that no training row's forward-looking label window overlaps the test
+  # period. Should be >= risk_label.horizon_days.
+  train_test_gap_days: 30
+
+  random_state: 42
+  candidate_models: [logistic_regression, random_forest, xgboost, lightgbm]
+  model_version: v1
+
+# ---------------------------------------------------------
+# RAG / GenAI
+# ---------------------------------------------------------
+rag:
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  chunk_size_tokens: 300
+  chunk_overlap_tokens: 50
+  top_k_retrieval: 5
+  vector_store: faiss        # faiss | chroma
+
+genai:
+  provider: groq
+  model: llama-3.3-70b-versatile    # Groq rotates available models; notebook 06 lists what's currently live
+  temperature: 0.3
+  max_tokens: 512
+
+# ---------------------------------------------------------
+# Analytics -- beta/Sharpe/risk-score/fundamentals for the dashboard
+# ---------------------------------------------------------
+analytics:
+  benchmark_ticker: "^NSEI"      # Nifty 50 used as broad market benchmark for beta
+                                   # (Yahoo has no reliable single Nifty Midcap150 index
+                                   # ticker for this purpose -- Nifty 50 is a documented
+                                   # documented simplification -- see README limitations)
+  risk_free_rate_annual: 0.07     # ~India 10Y G-Sec yield, used in Sharpe ratio calc
+  periods:                        # duration options shown in the dashboard's time-period selector
+    "1 Month": 21
+    "3 Months": 63
+    "6 Months": 126
+    "1 Year": 252
+    "2 Years": 504
+  price_chart_default_months: 6
+  price_chart_max_years: 4
+  fundamentals_cache_ttl_seconds: 86400   # fundamentals change slowly -- cache a full day
+
+# ---------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------
+dashboard:
+  cache_ttl_seconds: 300
+  default_view: Overview

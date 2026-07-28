@@ -1,0 +1,55 @@
+# --- Core / environment ---
+python-dotenv==1.0.1
+
+# --- AWS ---
+boto3==1.34.144
+
+# --- Spark (use a PySpark version matching your JDK11 setup; 3.5.x is JDK11-friendly) ---
+pyspark==3.5.1
+
+# --- Data ingestion ---
+# yfinance is deliberately NOT pinned to an exact version. Yahoo changes its
+# undocumented endpoints every few months and older releases stop working --
+# 0.2.40 returns HTTP 429 and a JSONDecodeError against the current API.
+# Recent versions use curl_cffi to perform the browser-style handshake Yahoo
+# now requires, so that is pinned as an explicit dependency rather than left
+# to the resolver.
+yfinance>=0.2.60
+curl_cffi>=0.7.0
+requests==2.32.3        # Google News RSS in src/ingestion/fetch_news.py
+
+# --- Data wrangling ---
+pandas==2.2.2
+numpy==1.26.4
+pyarrow==16.1.0        # parquet read/write outside Spark, if needed
+
+# --- ML ---
+scikit-learn==1.5.1
+xgboost==2.1.0
+lightgbm==4.4.0
+joblib==1.4.2
+
+# --- Sentiment / NLP ---
+vaderSentiment==3.3.2   # sentiment scoring in src/etl/sentiment.py
+
+# --- RAG / embeddings ---
+# sentence-transformers pulls in torch + transformers itself; both are
+# pinned below so the install is reproducible rather than resolver-dependent.
+sentence-transformers==3.0.1
+transformers==4.42.4
+torch==2.3.1            # ~2.5GB; the single largest item in this file
+faiss-cpu==1.8.0
+
+# --- GenAI ---
+groq==0.9.0
+
+# --- Dashboard ---
+streamlit==1.37.0
+plotly==5.22.0
+
+# --- Dev / notebooks ---
+jupyter==1.0.0
+ipykernel==6.29.5
+
+# --- Testing ---
+pytest==8.2.2
