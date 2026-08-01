@@ -21,3 +21,6 @@ __pycache__/
 # Build
 build/
 dist/
+*.backup
+*.bak2
+report_figures/
