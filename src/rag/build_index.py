@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 from sentence_transformers import SentenceTransformer
 
+from src.analytics.fundamentals import fetch_fundamentals, format_large_number
 from src.utils.s3_io import (
     read_hive_partitioned_parquet_s3,
     read_parquet_s3,
@@ -83,6 +84,62 @@ def _has_headlines(value) -> bool:
         return False
 
 
+
+def _fundamentals_doc(ticker: str, suffix: str = ".NS") -> str:
+    """A prose paragraph of company fundamentals for the RAG corpus.
+
+    Written as sentences rather than a table so the embedding model can match
+    it against natural-language questions ("is this company profitable?",
+    "how much debt does it carry?") and so the LLM can quote it directly.
+
+    Returns an empty string if yfinance has nothing useful, so that a company
+    with no fundamentals data simply contributes no document rather than one
+    full of "N/A".
+    """
+    try:
+        f = fetch_fundamentals(f"{ticker}{suffix}")
+    except Exception as e:
+        logger.warning(f"{ticker}: fundamentals lookup failed ({e})")
+        return ""
+
+    if not any(v is not None for v in f.values()):
+        return ""
+
+    parts = [f"Company fundamentals for {ticker}."]
+
+    if f.get("sector"):
+        parts.append(f"It operates in the {f['sector']} sector.")
+    if f.get("market_cap") is not None:
+        parts.append(f"Market capitalisation is {format_large_number(f['market_cap'])}.")
+    if f.get("pe_ratio") is not None:
+        parts.append(
+            f"The trailing price-to-earnings ratio is {f['pe_ratio']:.1f}, "
+            f"which indicates how much investors pay per rupee of earnings."
+        )
+    if f.get("net_income") is not None:
+        parts.append(f"Net income attributable to shareholders is "
+                     f"{format_large_number(f['net_income'])}.")
+    if f.get("profit_margin") is not None:
+        # yfinance reports this as a fraction (0.12 = 12%)
+        parts.append(
+            f"The net profit margin is {f['profit_margin'] * 100:.1f} percent, "
+            f"meaning that share of revenue is retained as profit."
+        )
+    if f.get("debt_to_equity") is not None:
+        # yfinance reports this percentage-style, e.g. 45.2 meaning 0.452x
+        ratio = f["debt_to_equity"] / 100.0
+        leverage = ("relatively low leverage" if ratio < 0.5
+                    else "moderate leverage" if ratio < 1.5
+                    else "high leverage")
+        parts.append(
+            f"The debt-to-equity ratio is {ratio:.2f}, indicating {leverage}. "
+            f"Higher leverage generally amplifies volatility, because a fixed "
+            f"interest burden magnifies the effect of changes in operating income."
+        )
+
+    return " ".join(parts)
+
+
 def build_ticker_corpus(ticker_df: pd.DataFrame, ticker: str,
                         predicted_label: str = None) -> list:
     """Assembles the raw text documents for one ticker: recent headlines
@@ -123,6 +180,15 @@ def build_ticker_corpus(ticker_df: pd.DataFrame, ticker: str,
         f"recent articles."
     )
     docs.append(summary)
+
+    # Fundamentals are fetched live from yfinance rather than stored in the
+    # feature table, because they change quarterly rather than daily and are
+    # not model inputs. They give the assistant something to say about the
+    # business itself, not only its price behaviour.
+    fundamentals = _fundamentals_doc(ticker)
+    if fundamentals:
+        docs.append(fundamentals)
+
     return docs
 
 

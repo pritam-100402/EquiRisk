@@ -24,3 +24,5 @@ dist/
 *.backup
 *.bak2
 report_figures/
+
+*.bak
