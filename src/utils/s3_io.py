@@ -20,7 +20,6 @@ from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
 import boto3
-from botocore.config import Config
 import pandas as pd
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
@@ -31,26 +30,14 @@ logger = logging.getLogger("equirisk.s3_io")
 _BUCKET = os.environ.get("S3_BUCKET", "equirisk-data")
 
 
-_BOTO_CONFIG = Config(
-    read_timeout=300,
-    connect_timeout=60,
-    retries={"max_attempts": 10, "mode": "adaptive"},
-)
-
-
 def _client():
     return boto3.client(
         "s3",
-        config=_BOTO_CONFIG,
         aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
         aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
         region_name=os.environ.get("AWS_DEFAULT_REGION", "ap-south-1"),
     )
 
-
-# ---------------------------------------------------------------------
-# Generic bytes / JSON
-# ---------------------------------------------------------------------
 
 def put_json(key: str, data: dict, bucket: str = _BUCKET) -> None:
     """Write a dict as JSON to s3://<bucket>/<key>."""
@@ -85,10 +72,6 @@ def list_keys(prefix: str, bucket: str = _BUCKET) -> list:
             keys.append(obj["Key"])
     return keys
 
-
-# ---------------------------------------------------------------------
-# Pandas convenience (for non-Spark reads, e.g. in notebooks / RAG / ML)
-# ---------------------------------------------------------------------
 
 def read_parquet_s3(key: str, bucket: str = _BUCKET) -> pd.DataFrame:
     """Read a single parquet object into a pandas DataFrame.
@@ -127,11 +110,11 @@ def read_hive_partitioned_parquet_s3(prefix: str, bucket: str = _BUCKET, partiti
         df[partition_col] = match.group(1)
         return df
 
-    # Each partition is a separate S3 GET. From outside AWS the cost is
-    # dominated by per-request round-trip latency, not bandwidth, so a
-    # sequential loop over 150+ partitions spends nearly all its time
-    # waiting. boto3 clients aren't thread-safe, but _client() builds a
-    # fresh one per call, so each worker gets its own.
+    # Fetched in parallel. Each partition is a separate S3 GET, and from
+    # outside AWS the cost is dominated by per-request round-trip latency
+    # rather than bandwidth -- so a sequential loop over 150+ partitions
+    # spends almost all its time waiting. boto3 clients are not thread-safe,
+    # but _client() builds a fresh one per call, so each worker gets its own.
     logger.info(f"Reading {len(keys)} parquet partitions from s3://{bucket}/{prefix}")
     with ThreadPoolExecutor(max_workers=16) as pool:
         frames = [f for f in pool.map(_read_one, keys) if f is not None]
@@ -161,10 +144,6 @@ def read_csv_s3(key: str, bucket: str = _BUCKET) -> pd.DataFrame:
     return pd.read_csv(io.BytesIO(obj["Body"].read()))
 
 
-# ---------------------------------------------------------------------
-# Binary blobs (model artifacts, FAISS index files, etc.)
-# ---------------------------------------------------------------------
-
 def put_bytes(key: str, data: bytes, bucket: str = _BUCKET) -> None:
     _client().put_object(Bucket=bucket, Key=key, Body=data)
     logger.info(f"Wrote bytes -> s3://{bucket}/{key}")
@@ -174,10 +153,6 @@ def get_bytes(key: str, bucket: str = _BUCKET) -> bytes:
     obj = _client().get_object(Bucket=bucket, Key=key)
     return obj["Body"].read()
 
-
-# ---------------------------------------------------------------------
-# Key-naming helpers -- keep naming conventions in one place
-# ---------------------------------------------------------------------
 
 def dated_key(prefix: str, ticker: str, ext: str = "json") -> str:
     """e.g. raw/news/RELIANCE/2026-07-26.json"""

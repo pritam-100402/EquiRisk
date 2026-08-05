@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 scripts/check_news_quality.py
 
@@ -23,13 +22,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-import pandas as pd  # noqa: E402
-from urllib.parse import unquote  # noqa: E402
+import pandas as pd
+from urllib.parse import unquote
 
-from src.ingestion.fetch_news import build_query, fetch_ticker_news  # noqa: E402
-from src.utils.config import load_config  # noqa: E402
+from src.ingestion.fetch_news import build_query, fetch_ticker_news
+from src.utils.config import load_config
 
-# Deliberately the awkward cases, not a random sample.
 DEFAULT_SAMPLE = ["ACC", "BSE", "MRF", "SAIL", "OIL", "TATACOMM", "BHARATFORG"]
 
 

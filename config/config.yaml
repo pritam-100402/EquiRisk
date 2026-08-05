@@ -85,6 +85,8 @@ ml:
   risk_label:
     type: classification      # classification | regression
     horizon_days: 30
+    # 3-class: [Low, Medium, High]  -- baseline 33.3%
+    # 2-class: [Low, High]          -- middle tercile dropped, baseline 50.0%
     buckets: [Low, Medium, High]
 
     # How the buckets are defined:

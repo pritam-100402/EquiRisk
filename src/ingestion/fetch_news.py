@@ -50,13 +50,8 @@ logger = logging.getLogger("equirisk.ingestion.news")
 
 GOOGLE_NEWS_RSS = "https://news.google.com/rss/search"
 
-# Google returns different editions per locale; the Indian English edition
-# surfaces domestic financial press that the US edition largely omits.
 LOCALE_PARAMS = "hl=en-IN&gl=IN&ceid=IN:en"
 
-# Corporate suffixes are noise in a search query and occasionally harm
-# recall ("Tata Communications Limited" matches less than "Tata
-# Communications"). Stripped from the end of the name only.
 _SUFFIX_RE = re.compile(
     r"\s+(Limited|Ltd\.?|Inc\.?|Corporation|Corp\.?|PLC|Company|Co\.?)$",
     re.IGNORECASE,
@@ -73,7 +68,7 @@ def _search_name(company_name: str) -> str:
     disambiguating work, so it stays.
     """
     name = (company_name or "").strip()
-    for _ in range(3):  # e.g. "... Company Limited"
+    for _ in range(3):
         stripped = _SUFFIX_RE.sub("", name).strip()
         if stripped == name:
             break
@@ -102,12 +97,6 @@ def _parse_pubdate(raw: str) -> str:
         return ""
 
 
-# Context terms that anchor a query to Indian equities. Deliberately
-# excludes bare "share"/"shares"/"stock": those are ordinary English words
-# that appear as verbs and nouns in unrelated coverage, which is how a
-# search for ACC (the cement company) surfaced the American College of
-# Cardiology -- "ACC shares updated recommendations for managing HFpEF".
-# The anchors below are near-unambiguous in an Indian financial context.
 MARKET_ANCHORS = '(NSE OR BSE OR Nifty OR Sensex OR "share price" OR crore OR earnings)'
 
 
@@ -160,8 +149,6 @@ def fetch_ticker_news(symbol: str, company_name: str, lookback_days: int,
         payload["data"].append({
             "article_id": _article_id(link, title),
             "title": title,
-            # Google's RSS description is an HTML link blob, not prose, so
-            # it is deliberately not carried through as a text field.
             "description": None,
             "published_at": published,
             "link": link,

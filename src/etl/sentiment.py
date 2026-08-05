@@ -28,8 +28,6 @@ logger = logging.getLogger("equirisk.etl.sentiment")
 _analyzer = SentimentIntensityAnalyzer()
 
 
-
-
 def score_headlines(headlines) -> float:
     """Average VADER compound score across a list of headlines.
     Returns 0.0 (neutral) for empty/null input -- a no-news day should

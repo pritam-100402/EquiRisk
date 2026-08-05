@@ -23,15 +23,6 @@ from src.utils.config import load_config as _load_config
 
 logger = logging.getLogger("equirisk.etl.clean_transform")
 
-# Declared rather than inferred. Schema inference reads the input to work out
-# its shape, and it cannot determine the fields of an array of structs when
-# every file's `data` array is empty -- which happens whenever the news source
-# returns nothing for any ticker. Inference then types `data` as an array of
-# strings, and `article.title` fails at analysis time with a confusing error
-# about a struct field on a non-struct column. Declaring the schema makes an
-# empty run produce zero article rows instead, which the downstream LEFT join
-# already handles correctly. It also skips the inference pass, which is free
-# speed.
 NEWS_ARTICLE_SCHEMA = StructType([
     StructField("article_id", StringType(), True),
     StructField("title", StringType(), True),
@@ -48,8 +39,6 @@ NEWS_FILE_SCHEMA = StructType([
     StructField("fetched_at", StringType(), True),
     StructField("data", ArrayType(NEWS_ARTICLE_SCHEMA), True),
 ])
-
-
 
 
 def read_raw_prices(spark, bucket: str, raw_prefix: str) -> DataFrame:
@@ -154,6 +143,10 @@ def diagnose_news_join(prices_df: DataFrame, news_daily_df: DataFrame) -> dict:
     constant zero. Nothing errors. Log the overlap so that failure mode is
     visible instead of invisible.
     """
+    # A LEFT join cannot fail: if no news symbol matches a price symbol, every
+    # row still survives with null headlines and article_count 0. The pipeline
+    # completes, the model trains, and the sentiment features are silently
+    # constant. Log the overlap so that failure mode is visible.
     price_symbols = {r["ticker"] for r in prices_df.select("ticker").distinct().collect()}
     news_symbols = {r["ticker"] for r in news_daily_df.select("ticker").distinct().collect()}
     matched = price_symbols & news_symbols

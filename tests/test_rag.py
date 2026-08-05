@@ -16,7 +16,7 @@ import pytest
 pytest.importorskip("faiss", reason="faiss-cpu not installed")
 pytest.importorskip("sentence_transformers", reason="sentence-transformers not installed")
 
-from src.rag.build_index import _chunk_text, _has_headlines, build_ticker_corpus  # noqa: E402
+from src.rag.build_index import _chunk_text, _has_headlines, build_ticker_corpus
 
 
 class TestChunkText:
@@ -103,7 +103,7 @@ class TestBuildTickerCorpus:
         import numpy as np
         arr = np.array(["Profits up sharply", "New plant announced"], dtype=object)
         docs = build_ticker_corpus(self._frame(headlines=arr), "TESTCO")
-        assert len(docs) == 3  # two headlines + one summary
+        assert len(docs) == 3
         assert any("Profits up sharply" in d for d in docs)
 
     def test_null_label_does_not_leak_the_string_none(self):

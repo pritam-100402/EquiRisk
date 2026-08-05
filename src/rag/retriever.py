@@ -21,8 +21,6 @@ logger = logging.getLogger("equirisk.rag.retriever")
 _embedder = None
 
 
-
-
 def _get_embedder(model_name: str) -> SentenceTransformer:
     global _embedder
     if _embedder is None:
@@ -65,28 +63,10 @@ def retrieve_relevant_chunks(ticker: str, query: str, config_path: str = None) -
     scores, indices = index.search(query_vec, top_k)
 
     results = [chunks[i] for i in indices[0] if 0 <= i < len(chunks)]
-
-    # Always include the two generated summary documents, whatever the query.
-    #
-    # Pure top-k similarity is the wrong tool for broad questions. "Should I
-    # invest in this stock?" is lexically closer to a random headline than to
-    # a paragraph of ratios, so the fundamentals and risk statistics -- the
-    # two documents most likely to be needed -- can be crowded out by news.
-    # They are short, so pinning them costs little context and guarantees the
-    # model always has the company's numbers in front of it.
-    pinned = [c for c in chunks
-              if c.startswith("Company fundamentals for")
-              or c.startswith("As of ")]
-    for doc in pinned:
-        if doc not in results:
-            results.insert(0, doc)
-
     return results
 
 
 if __name__ == "__main__":
-    # Quick manual test -- run after build_index.py has populated at
-    # least one ticker's index.
     test_ticker = "TATAMOTORS"
     test_query = "why is this stock considered risky right now"
     chunks = retrieve_relevant_chunks(test_ticker, test_query)

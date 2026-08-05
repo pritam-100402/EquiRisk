@@ -84,7 +84,7 @@ def compute_beta(stock_returns: pd.Series, benchmark_returns: pd.Series) -> floa
     benchmark_returns.index = pd.to_datetime(benchmark_returns.index).normalize()
 
     aligned = pd.concat([stock_returns, benchmark_returns], axis=1, join="inner").dropna()
-    if len(aligned) < 20:  # arbitrary but reasonable minimum overlap
+    if len(aligned) < 20:
         logger.warning(f"Only {len(aligned)} overlapping dates between stock and benchmark -- beta unreliable")
         return float("nan")
     aligned.columns = ["stock", "benchmark"]

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 scripts/run_pipeline_cli.py
 
@@ -26,13 +25,11 @@ import logging
 import sys
 from pathlib import Path
 
-# Allow `python scripts/run_pipeline_cli.py` from the repo root without
-# needing the package installed or PYTHONPATH set by hand.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.pipeline.orchestrator import (  # noqa: E402
+from src.pipeline.orchestrator import (
     run_full_pipeline,
     stage_ingest_prices,
     stage_ingest_news,
@@ -43,9 +40,8 @@ from src.pipeline.orchestrator import (  # noqa: E402
     stage_ml_predict,
     stage_rag_refresh,
 )
-from src.utils.logging_config import setup_logging  # noqa: E402
+from src.utils.logging_config import setup_logging
 
-# Short names for --stage, in pipeline order.
 INDIVIDUAL_STAGES = {
     "prices": ("Ingest prices", stage_ingest_prices),
     "news": ("Ingest news", stage_ingest_news),

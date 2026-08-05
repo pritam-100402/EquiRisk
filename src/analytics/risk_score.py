@@ -21,9 +21,6 @@ match your own intuition once you see real numbers for the 150 tickers.
 
 import numpy as np
 
-# Clipping ranges used to normalize each input to a 0-100 sub-score
-# before combining. These bounds are typical ranges for Indian midcaps,
-# not universal constants.
 VOLATILITY_CLIP_MAX = 0.80   # annualized volatility of 80%+ treated as max risk
 BETA_CLIP_MIN = 0.0
 BETA_CLIP_MAX = 2.5
@@ -61,8 +58,6 @@ def compute_risk_score(volatility: float, beta: float, avg_sentiment: float) -> 
     vol_score = _clip_scale(volatility, 0, VOLATILITY_CLIP_MAX)
     beta_score = _clip_scale(beta, BETA_CLIP_MIN, BETA_CLIP_MAX)
 
-    # Sentiment runs the opposite direction: very negative sentiment (-1)
-    # should push risk UP, very positive (+1) should pull it DOWN.
     sentiment_risk_score = _clip_scale(-avg_sentiment, -1, 1)
 
     composite_0_100 = (
@@ -71,7 +66,6 @@ def compute_risk_score(volatility: float, beta: float, avg_sentiment: float) -> 
         + WEIGHTS["sentiment"] * sentiment_risk_score
     )
 
-    # Rescale 0-100 -> -100..100 (50 -> 0)
     return round((composite_0_100 - 50) * 2, 1)
 
 

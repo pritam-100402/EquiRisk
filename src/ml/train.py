@@ -38,29 +38,21 @@ logger = logging.getLogger("equirisk.ml.train")
 # reason: MRF trades near Rs 150,000 and IDEA near Rs 10, so those columns
 # encoded which company a row belonged to rather than anything about its risk.
 FEATURE_COLUMNS = [
-    # --- Returns and realised volatility, multiple horizons ---------------
-    # volatility_30d is deliberately matched to the label horizon: the best
-    # single predictor of the next 30 days is usually the last 30.
     "daily_return",
     "volatility_5d", "volatility_10d", "volatility_20d",
     "volatility_30d", "volatility_60d", "volatility_90d",
 
-    # --- Range-based estimators (use the OHLC, not just close) ------------
     "parkinson_vol_20d", "garman_klass_vol_20d",
 
-    # --- Volatility dynamics ---------------------------------------------
     "vol_ratio_20_60", "vol_ratio_20_90",
     "vol_of_vol_60d", "vol_of_vol_ratio",
 
-    # --- Downside / tail risk --------------------------------------------
     "downside_vol_20d", "downside_ratio",
     "return_skew_60d", "return_kurt_60d",
     "extreme_move_count_20d",
 
-    # --- Overnight information arrival -----------------------------------
     "overnight_gap_vol_20d", "avg_abs_gap_20d",
 
-    # --- Market regime and sensitivity -----------------------------------
     "market_vol_20d", "rel_vol_20d",
     "beta_60d", "corr_market_60d",
 
@@ -69,10 +61,8 @@ FEATURE_COLUMNS = [
     "drawdown_from_peak", "max_drawdown_60d",
     "pct_of_52w_range", "momentum_20d", "momentum_60d",
 
-    # --- Oscillators ------------------------------------------------------
     "rsi_14", "macd_norm", "macd_signal_norm",
 
-    # --- Liquidity and volume --------------------------------------------
     "volume_ratio", "amihud_illiq_20d",
 
     # --- News sentiment ---------------------------------------------------
@@ -82,16 +72,11 @@ FEATURE_COLUMNS = [
     # report these as unused.
     "daily_sentiment", "sentiment_3d_avg", "article_count",
 
-    # --- Cross-sectional rank features ------------------------------------
-    # The label is a rank within each date, so these put the features in the
-    # same space as the target rather than making the model infer the
-    # ordering from absolute levels on every date.
     "xs_rank_volatility_20d", "xs_rank_volatility_60d", "xs_rank_volatility_90d",
     "xs_rank_parkinson_vol_20d", "xs_rank_garman_klass_vol_20d",
     "xs_rank_downside_vol_20d", "xs_rank_vol_of_vol_60d",
     "xs_rank_beta_60d", "xs_rank_amihud_illiq_20d",
 
-    # Rank persistence -- the property the cross-sectional target relies on.
     "xs_rank_mean_60d", "xs_rank_std_60d", "xs_rank_drift",
 ]
 LABEL_COLUMN = "risk_label"
@@ -102,8 +87,6 @@ MODEL_REGISTRY = {
     "xgboost": lambda: xgb.XGBClassifier(n_estimators=300, max_depth=6, eval_metric="mlogloss", random_state=42),
     "lightgbm": lambda: lgb.LGBMClassifier(n_estimators=300, max_depth=6, random_state=42),
 }
-
-
 
 
 def load_feature_table(bucket: str, processed_prefix: str) -> pd.DataFrame:
@@ -251,40 +234,7 @@ def run_training(config_path: str = None) -> str:
     comparison_table = compare_models(comparison_input, labels)
     logger.info(f"Model comparison:\n{comparison_table}")
 
-    # Soft-voting ensemble: average the predicted class probabilities
-    # across all candidates. The models make different errors -- a linear
-    # model and a tree ensemble fail on different rows -- so averaging their
-    # probabilities usually beats every individual member by a point or two.
-    # Entered as a candidate and selected only if it actually wins.
-    try:
-        import numpy as np
-        probas = [m.predict_proba(X_test) for m, _ in trained.values()]
-        ensemble_pred = encoder.inverse_transform(np.mean(probas, axis=0).argmax(axis=1))
-        y_test_labels = encoder.inverse_transform(y_test)
-
-        from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
-        comparison_table.loc["ensemble_soft_vote"] = {
-            "accuracy": accuracy_score(y_test_labels, ensemble_pred),
-            "f1_macro": f1_score(y_test_labels, ensemble_pred, average="macro"),
-            "precision_macro": precision_score(y_test_labels, ensemble_pred,
-                                               average="macro", zero_division=0),
-            "recall_macro": recall_score(y_test_labels, ensemble_pred, average="macro"),
-        }
-        comparison_table = comparison_table.sort_values("f1_macro", ascending=False)
-        logger.info(f"Model comparison (with ensemble):\n{comparison_table}")
-    except Exception as e:
-        logger.warning(f"Ensemble evaluation skipped: {e}")
-
-    # The ensemble is not a single fitted estimator, so it cannot be
-    # serialised through the existing bundle format. If it wins, that is
-    # worth reporting -- but the best single model is what gets deployed.
-    ranked = [n for n in comparison_table.index if n != "ensemble_soft_vote"]
-    if comparison_table.index[0] == "ensemble_soft_vote":
-        logger.info(
-            "Soft-vote ensemble scored highest; deploying the best single "
-            "model instead, since the bundle format holds one estimator."
-        )
-    best_model_name = ranked[0]
+    best_model_name = comparison_table.index[0]
     best_model, _ = trained[best_model_name]
     logger.info(f"Best model: {best_model_name} (f1_macro={comparison_table.loc[best_model_name, 'f1_macro']:.4f})")
 

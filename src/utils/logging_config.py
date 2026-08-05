@@ -23,7 +23,6 @@ import sys
 LOG_FORMAT = "%(asctime)s | %(levelname)-7s | %(name)-32s | %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-# Libraries that are chatty enough to drown out the pipeline's own logs.
 _NOISY_LIBRARIES = {
     "py4j": logging.WARNING,
     "py4j.java_gateway": logging.WARNING,

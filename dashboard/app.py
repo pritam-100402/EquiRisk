@@ -15,10 +15,6 @@ Run with: streamlit run dashboard/app.py
 import sys
 from pathlib import Path
 
-# Resolve everything relative to the repo root rather than the process's
-# working directory -- `streamlit run` can be invoked from anywhere, and
-# a bare open("config/config.yaml") only works if you happen to launch
-# from the repo root.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "config" / "config.yaml"
 
@@ -39,252 +35,10 @@ from src.utils.s3_io import read_hive_partitioned_parquet_s3, read_parquet_s3, p
 
 st.set_page_config(page_title="EquiRisk", page_icon="\U0001F4C8", layout="wide")
 
-# ---------------------------------------------------------------------
-# Theme: light/dark toggle + card styling
-# ---------------------------------------------------------------------
-
-THEMES = {
-    "light": {
-        "bg": "#eef2f7", "card": "#ffffff", "border": "#dbe3ec",
-        "text": "#0f172a", "muted": "#64748b", "accent": "#1d4e89",
-        "accent_soft": "#e3edf9", "input_bg": "#ffffff",
-        "table_head": "#f1f5f9", "table_row": "#ffffff",
-        "shadow": "0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.05)",
-        "plotly": "plotly_white", "grid": "#e8edf3", "grid_filter": "none",
-    },
-    "dark": {
-        "bg": "#0d1117", "card": "#161b22", "border": "#2a313c",
-        "text": "#e6edf3", "muted": "#8b949e", "accent": "#58a6ff",
-        "accent_soft": "#1c2b3d", "input_bg": "#0f141a",
-        "table_head": "#1c2128", "table_row": "#161b22",
-        "shadow": "0 1px 2px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.3)",
-        "plotly": "plotly_dark", "grid": "#262c36", "grid_filter": "none",
-    },
-}
-
-if "theme" not in st.session_state:
-    st.session_state.theme = "light"
-
-T = THEMES[st.session_state.theme]
-
-
-def inject_css(t):
-    """Page CSS plus overrides for Streamlit's own widgets.
-
-    The dataframe, multiselect and buttons carry baked-in colours that ignore
-    page-level rules, which is why a partial theme leaves dark widgets sitting
-    on a light page. Each is targeted by its stable data-testid or baseweb
-    attribute rather than by generated class names.
-    """
-    st.markdown(f"""
-    <style>
-      .stApp, .main, section.main {{ background:{t['bg']} !important; }}
-      .block-container {{ padding-top:2rem; max-width:1400px; }}
-
-      h1,h2,h3,h4,h5,h6,p,span,label,li,
-      .stMarkdown, .stMarkdown p,
-      [data-testid="stWidgetLabel"], [data-testid="stWidgetLabel"] p {{
-          color:{t['text']} !important;
-      }}
-      [data-testid="stCaptionContainer"] p {{ color:{t['muted']} !important; }}
-
-      div[data-testid="stPlotlyChart"], div[data-testid="stDataFrame"],
-      div[data-testid="stMetric"], div[data-testid="stExpander"] {{
-          background:{t['card']} !important;
-          border:1px solid {t['border']} !important;
-          border-radius:16px !important;
-          padding:16px 18px !important;
-          box-shadow:{t['shadow']} !important;
-          margin-bottom:18px !important;
-      }}
-      div[data-testid="stMetric"] label p {{
-          color:{t['muted']} !important; font-size:.82rem !important;
-          text-transform:uppercase; letter-spacing:.04em;
-      }}
-      div[data-testid="stMetricValue"] {{ color:{t['text']} !important; font-weight:700 !important; }}
-
-      div[data-testid="stDataFrame"] > div {{
-          background:{t['table_row']} !important; border-radius:10px !important; overflow:hidden;
-      }}
-      div[data-testid="stDataFrame"] * {{ color:{t['text']} !important; }}
-      div[data-testid="stDataFrame"] [role="columnheader"] {{
-          background:{t['table_head']} !important; font-weight:600 !important;
-          border-bottom:2px solid {t['border']} !important;
-      }}
-      div[data-testid="stDataFrame"] [role="gridcell"] {{
-          background:{t['table_row']} !important;
-          border-bottom:1px solid {t['border']} !important;
-      }}
-      canvas {{ background:{t['table_row']} !important; }}
-
-      div[data-baseweb="select"] > div {{
-          background:{t['input_bg']} !important;
-          border:1px solid {t['border']} !important;
-          border-radius:10px !important; color:{t['text']} !important;
-      }}
-      div[data-baseweb="select"] span, div[data-baseweb="select"] input {{ color:{t['text']} !important; }}
-      span[data-baseweb="tag"] {{
-          background:{t['accent_soft']} !important; color:{t['accent']} !important;
-          border:1px solid {t['accent']}44 !important;
-          border-radius:8px !important; font-weight:600 !important;
-      }}
-      span[data-baseweb="tag"] svg {{ fill:{t['accent']} !important; }}
-      ul[data-baseweb="menu"], div[data-baseweb="popover"] div {{
-          background:{t['card']} !important; color:{t['text']} !important;
-      }}
-
-      .stTextInput input, .stNumberInput input, .stTextArea textarea {{
-          background:{t['input_bg']} !important; color:{t['text']} !important;
-          border:1px solid {t['border']} !important; border-radius:10px !important;
-      }}
-
-      .stButton button, .stDownloadButton button {{
-          background:{t['card']} !important; color:{t['text']} !important;
-          border:1px solid {t['border']} !important; border-radius:10px !important;
-          font-weight:600 !important; box-shadow:{t['shadow']} !important;
-      }}
-      .stButton button p {{ color:inherit !important; }}
-      .stButton button:hover {{ border-color:{t['accent']} !important; color:{t['accent']} !important; }}
-
-      .stTabs [data-baseweb="tab-list"] {{ gap:8px; background:transparent;
-          border-bottom:1px solid {t['border']}; }}
-      .stTabs [data-baseweb="tab"] {{
-          background:{t['card']} !important; border:1px solid {t['border']} !important;
-          border-bottom:none !important; border-radius:12px 12px 0 0 !important;
-          padding:10px 20px !important;
-      }}
-      .stTabs [data-baseweb="tab"] p {{ color:{t['muted']} !important; font-weight:600; }}
-      .stTabs [aria-selected="true"] {{ background:{t['accent_soft']} !important;
-          border-bottom:3px solid {t['accent']} !important; }}
-      .stTabs [aria-selected="true"] p {{ color:{t['accent']} !important; }}
-      .stTabs [data-baseweb="tab-highlight"] {{ background:transparent !important; }}
-
-      div[data-testid="stToggle"] label p {{ color:{t['text']} !important; }}
-      section[data-testid="stSidebar"] > div {{ background:{t['card']} !important; }}
-      div[data-testid="stVerticalBlock"] {{ gap:.55rem !important; }}
-      hr {{ border-color:{t['border']} !important; margin:1rem 0 !important; }}
-
-
-      /* ---- chat input: renders its own dark container + red focus ring ---- */
-      div[data-testid="stChatInput"],
-      div[data-testid="stChatInput"] > div,
-      div[data-testid="stChatInput"] div[data-baseweb="textarea"],
-      div[data-testid="stChatInput"] div[data-baseweb="base-input"] {{
-          background:{t['input_bg']} !important;
-          border-color:{t['border']} !important;
-          border-radius:12px !important;
-          box-shadow:none !important;
-      }}
-      div[data-testid="stChatInput"] textarea {{
-          background:{t['input_bg']} !important;
-          color:{t['text']} !important;
-          caret-color:{t['accent']} !important;
-      }}
-      div[data-testid="stChatInput"] textarea::placeholder {{
-          color:{t['muted']} !important; opacity:1 !important;
-      }}
-      div[data-testid="stChatInput"] button svg,
-      div[data-testid="stChatInput"] svg {{ fill:{t['accent']} !important; }}
-      div[data-testid="stChatInput"]:focus-within,
-      div[data-testid="stChatInput"] div:focus-within {{
-          border-color:{t['accent']} !important;
-          box-shadow:0 0 0 2px {t['accent']}33 !important;
-      }}
-      div[data-testid="stChatMessage"] {{
-          background:{t['card']} !important;
-          border:1px solid {t['border']} !important;
-          border-radius:14px !important;
-      }}
-
-      /* ---- dataframe draws into a canvas that ignores CSS colours ---- */
-      div[data-testid="stDataFrame"] iframe {{
-          background:{t['table_row']} !important;
-          border-radius:10px !important;
-          filter:{t['grid_filter']};
-      }}
-
-      /* ---- slider: default accent is red ---- */
-      .stSlider div[data-baseweb="slider"] div[role="slider"] {{
-          background:{t['accent']} !important; border-color:{t['accent']} !important;
-      }}
-      .stSlider div[data-baseweb="slider"] > div > div > div:first-child {{
-          background:{t['accent']} !important;
-      }}
-      .stSlider [data-testid="stTickBar"],
-      .stSlider [data-testid="stTickBarMin"],
-      .stSlider [data-testid="stTickBarMax"],
-      .stSlider [data-testid="stThumbValue"] {{
-          color:{t['muted']} !important;
-      }}
-      .stSlider [data-baseweb="slider"] [data-testid="stThumbValue"] {{
-          color:{t['accent']} !important; font-weight:600 !important;
-      }}
-
-      /* ---- catch-all for remaining red accents ---- */
-      [data-baseweb="input"]:focus-within, [data-baseweb="textarea"]:focus-within {{
-          border-color:{t['accent']} !important;
-      }}
-
-
-      /* ---- the "Running..." status widget renders its own dark bar ---- */
-      div[data-testid="stStatusWidget"],
-      div[data-testid="stStatusWidget"] > div {{
-          background:{t['card']} !important;
-          border:1px solid {t['border']} !important;
-          border-radius:10px !important;
-          box-shadow:{t['shadow']} !important;
-      }}
-      div[data-testid="stStatusWidget"] label,
-      div[data-testid="stStatusWidget"] span {{ color:{t['text']} !important; }}
-      div[data-testid="stStatusWidget"] code {{
-          background:{t['accent_soft']} !important; color:{t['accent']} !important;
-      }}
-
-
-      /* Streamlit's status widget renders its own dark bar in the top-right
-         while cached functions execute. It ignores page CSS and only ever
-         shows a transient loading state, so it is hidden rather than themed. */
-      div[data-testid="stStatusWidget"] {{ display:none !important; }}
-      #MainMenu {{ visibility:hidden; }}
-      footer {{ visibility:hidden; }}
-      header[data-testid="stHeader"] {{ background:transparent !important; }}
-
-      .equirisk-card {{ background:{t['card']}; border:1px solid {t['border']};
-          border-radius:16px; padding:18px 20px; box-shadow:{t['shadow']}; margin-bottom:18px; }}
-    </style>
-    """, unsafe_allow_html=True)
-
-
-def style_fig(fig, t=None):
-    """Theme a Plotly figure so it sits inside its card rather than as a
-    bright rectangle on a dark page."""
-    t = t or T
-    fig.update_layout(
-        template=t["plotly"], paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=t["text"], size=12), title_font=dict(color=t["text"], size=15),
-        margin=dict(t=46, b=26, l=14, r=14),
-        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color=t["text"])),
-        hoverlabel=dict(bgcolor=t["card"], font_color=t["text"]),
-    )
-    fig.update_xaxes(gridcolor=t["grid"], linecolor=t["border"], tickfont=dict(color=t["muted"]))
-    fig.update_yaxes(gridcolor=t["grid"], linecolor=t["border"], tickfont=dict(color=t["muted"]))
-    return fig
-
-
-inject_css(T)
-
-
-
-
 PREDICTIONS_KEY = predictions_key()
 
 ML_LABEL_COLORS = {"Low": "#22c55e", "Medium": "#eab308", "High": "#ea2626"}
 
-
-# ---------------------------------------------------------------------
-# Cached data loaders -- all Yahoo/S3 calls funnel through these so
-# reruns (every widget interaction) don't refetch from the network.
-# ---------------------------------------------------------------------
 
 @st.cache_data(ttl=300)
 def _load_config():
@@ -372,8 +126,8 @@ def price_chart(df: pd.DataFrame, ticker: str, months_back: int) -> go.Figure:
     if "ma_20d" in windowed.columns:
         fig.add_trace(go.Scatter(x=windowed["date"], y=windowed["ma_20d"], name="20d MA",
                                   line=dict(color="#f59e0b", dash="dot")))
-    fig.update_layout(title=f"{ticker} -- Price", height=380)
-    return style_fig(fig)
+    fig.update_layout(title=f"{ticker} -- Price", height=380, margin=dict(t=40, b=20))
+    return fig
 
 
 def render_risk_badge(score: float, category: str, sublabel: str = ""):
@@ -388,7 +142,7 @@ def render_risk_badge(score: float, category: str, sublabel: str = ""):
                     display:inline-block; color:#0b0f19; font-weight:700; font-size:1.05rem;">
             {category} &nbsp;·&nbsp; Score: {score_text}
         </div>
-        <div style="color:{T["muted"]}; font-size:0.85rem; margin-top:4px;">{sublabel}</div>
+        <div style="color:#9ca3af; font-size:0.85rem; margin-top:4px;">{sublabel}</div>
         """,
         unsafe_allow_html=True,
     )
@@ -403,23 +157,14 @@ def render_ml_label_badge(label: str):
     )
 
 
-# ---------------------------------------------------------------------
-# Page setup
-# ---------------------------------------------------------------------
-
 config = _load_config()
 analytics_config = config["analytics"]
 
 st.title("EquiRisk")
 st.caption("Risk prediction dashboard for Nifty150 midcap companies")
 
-top_col1, top_col2, top_col3 = st.columns([4, 1, 1])
+top_col1, top_col2 = st.columns([5, 1])
 with top_col2:
-    _dark = st.session_state.theme == "dark"
-    if st.toggle("Dark mode", value=_dark, key="theme_toggle") != _dark:
-        st.session_state.theme = "light" if _dark else "dark"
-        st.rerun()
-with top_col3:
     if st.button("\U0001F504 Refresh Pipeline", use_container_width=True):
         run_refresh_pipeline()
 
@@ -434,9 +179,6 @@ tickers = sorted(full_df["ticker"].unique().tolist())
 
 tab_overview, tab_detail, tab_chat = st.tabs(["\U0001F4CA Overview", "\U0001F3E2 Company Detail", "\U0001F4AC Chat Assistant"])
 
-# ---------------------------------------------------------------------
-# Tab 1: Overview
-# ---------------------------------------------------------------------
 with tab_overview:
     st.subheader("All Companies -- Current Risk")
 
@@ -467,42 +209,10 @@ with tab_overview:
     })
     display_df["Risk"] = display_df["Risk"].fillna("Pending")
 
-    # st.dataframe renders into a canvas-based grid whose colours ignore page
-    # CSS, so it stayed dark inside a light card. Styler output is plain HTML
-    # and inherits the theme correctly.
-    # Wrapped in a fixed-height scroll container -- the Styler table has no
-    # height limit of its own, so 150 rows would run down the whole page.
-    # Headers stay pinned via position:sticky.
-    st.markdown(
-        f'<div style="max-height:460px; overflow-y:auto; border-radius:10px; '
-        f'border:1px solid {T["border"]};">' +
-        display_df.style
-            .hide(axis="index")
-            .set_table_styles([
-                {"selector": "th", "props": [
-                    ("background", T["table_head"]), ("color", T["text"]),
-                    ("font-weight", "600"), ("padding", "10px 12px"),
-                    ("text-align", "left"), ("position", "sticky"),
-                    ("top", "0"), ("z-index", "2"),
-                    ("border-bottom", f"2px solid {T['border']}")]},
-                {"selector": "td", "props": [
-                    ("color", T["text"]), ("padding", "9px 12px"),
-                    ("border-bottom", f"1px solid {T['border']}")]},
-                {"selector": "table", "props": [
-                    ("width", "100%"), ("border-collapse", "collapse"),
-                    ("font-size", "0.9rem")]},
-                {"selector": "tbody tr:hover td", "props": [
-                    ("background", T["accent_soft"])]},
-            ])
-            .to_html() + '</div>',
-        unsafe_allow_html=True,
-    )
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
     if predictions_df.empty:
         st.info("No live predictions found yet -- run `python -m src.ml.predict` (or Refresh Pipeline) to populate current risk labels.")
 
-# ---------------------------------------------------------------------
-# Tab 2: Company Detail
-# ---------------------------------------------------------------------
 with tab_detail:
     col_company, col_period = st.columns([2, 2])
     with col_company:
@@ -565,7 +275,7 @@ with tab_detail:
         value=analytics_config["price_chart_default_months"],
         key="detail_months_back",
     )
-    st.plotly_chart(style_fig(price_chart(ticker_df, selected_ticker, months_back)), use_container_width=True)
+    st.plotly_chart(price_chart(ticker_df, selected_ticker, months_back), use_container_width=True)
 
     st.divider()
 
@@ -604,29 +314,13 @@ with tab_detail:
     if not np.isnan(cagr):
         projected_value = invest_amount * ((1 + cagr) ** invest_years)
         gain = projected_value - invest_amount
-        # Colour and wording follow the sign. st.success() was hardcoded, so a
-        # projected LOSS was rendered on a green background and still labelled
-        # a "gain" -- with a minus sign inside the number.
-        is_gain = gain >= 0
-        bg     = "#dcfce7" if is_gain else "#fee2e2"
-        fg     = "#166534" if is_gain else "#991b1b"
-        border = "#86efac" if is_gain else "#fca5a5"
-        word   = "gain" if is_gain else "loss"
-        st.markdown(
-            f"""<div style="background:{bg}; color:{fg}; border:1px solid {border};
-                 border-radius:10px; padding:12px 16px; margin:6px 0;">
-              Projected value after {invest_years} year(s):
-              <b>\u20B9{projected_value:,.0f}</b>
-              ({word} of <b>\u20B9{abs(gain):,.0f}</b>, assuming the historical CAGR holds)
-            </div>""",
-            unsafe_allow_html=True,
+        st.success(
+            f"Projected value after {invest_years} year(s): **\u20B9{projected_value:,.0f}** "
+            f"(gain of \u20B9{gain:,.0f}, assuming the historical CAGR holds)"
         )
     else:
         st.info("Not enough price history to compute a CAGR for this ticker yet.")
 
-# ---------------------------------------------------------------------
-# Tab 3: Chat Assistant
-# ---------------------------------------------------------------------
 with tab_chat:
     st.subheader("Ask about a company's risk profile")
     st.caption("Answers are grounded in retrieved news and computed stats via RAG + Groq.")

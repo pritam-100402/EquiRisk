@@ -90,7 +90,7 @@ calm markets is usually volatile relative to them in turbulent ones. See
 ┌───────────────┐ ┌─────────────┐ ┌──────────────┐
 │   train.py    │ │ predict.py  │ │build_index.py│
 │  4 candidates │ │ latest row  │ │  FAISS index │
-│  + ensemble   │ │ per ticker  │ │  per ticker  │
+│  best by F1   │ │ per ticker  │ │  per ticker  │
 │   → models/   │ │→predictions/│ │→ vectorstore/│
 └───────┬───────┘ └──────┬──────┘ └──────┬───────┘
         │                │               │
@@ -206,7 +206,6 @@ legitimately through feature engineering and a better-posed target.
                      accuracy  f1_macro  precision_macro  recall_macro
 random_forest        0.521732  0.521908         0.533203      0.521320
 logistic_regression  0.521800  0.521749         0.535029      0.521354
-ensemble_soft_vote   0.512190  0.514102         0.523930      0.511882
 lightgbm             0.497487  0.499685         0.505247      0.497299
 xgboost              0.487368  0.489231         0.497269      0.487126
 ```
@@ -216,10 +215,6 @@ the gradient-boosted models. That indicates the relationship is largely *monoton
 rank space*: once features are rank-transformed, a linear decision boundary is
 approximately the right shape, and the tree ensembles spend capacity fitting
 curvature that isn't there.
-
-The soft-voting ensemble scored *below* the best single model — averaging in the
-weaker XGBoost and LightGBM predictions dragged it down. Reported as a negative
-result.
 
 ---
 
@@ -378,7 +373,7 @@ elapsed time is S3 transfer, not computation.
 | `etl` | Clean, join → `processed/base/` | ~15 min |
 | `sentiment` | VADER → `processed/sentiment/` | ~15 min |
 | `features` | 52 features + label → `processed/features/` | ~18 min |
-| `train` | 4 models + ensemble → `models/` | ~5 min |
+| `train` | 4 candidate models → `models/` | ~5 min |
 | `predict` | Latest row per ticker → `predictions/` | ~2 min |
 | `rag` | FAISS index per ticker → `vectorstore/` | ~10 min |
 
@@ -456,7 +451,7 @@ src/
     sentiment.py               VADER scoring
     feature_engineering.py     52 features + risk label
   ml/
-    train.py                   Split, train 4 candidates, ensemble, save best
+    train.py                   Split, train 4 candidates, save the best
     predict.py                 Live inference on the latest row per ticker
     evaluate.py                Metrics and comparison tables
   rag/

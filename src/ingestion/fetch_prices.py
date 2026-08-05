@@ -19,8 +19,6 @@ from src.utils.config import load_config as _load_config
 logger = logging.getLogger("equirisk.ingestion.prices")
 
 
-
-
 def _load_ticker_list(config: dict) -> list:
     """Reads the master ticker CSV (local, versioned metadata file --
     not "data" in the no-local-storage sense, just a small reference

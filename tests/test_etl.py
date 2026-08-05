@@ -15,7 +15,7 @@ import pytest
 
 vader = pytest.importorskip("vaderSentiment", reason="vaderSentiment not installed")
 
-from src.etl.sentiment import score_headlines  # noqa: E402
+from src.etl.sentiment import score_headlines
 
 
 class TestScoreHeadlines:
@@ -23,8 +23,6 @@ class TestScoreHeadlines:
     has to treat 'no news' and 'bad news' as different things."""
 
     def test_empty_input_is_neutral_not_missing(self):
-        # A no-news day must read as 0.0 (no signal), not NaN -- the whole
-        # downstream pipeline assumes it never has to handle nulls here.
         assert score_headlines([]) == 0.0
         assert score_headlines(None) == 0.0
 
@@ -51,7 +49,6 @@ class TestScoreHeadlines:
         assert abs(mixed) < abs(score_headlines([positive]))
 
     def test_ignores_none_entries_in_list(self):
-        # collect_list can yield nulls if an article had a null title.
         with_nulls = score_headlines(["Record profits and excellent growth", None])
         without = score_headlines(["Record profits and excellent growth"])
         assert with_nulls == pytest.approx(without)
@@ -72,15 +69,12 @@ class TestTrainingCutoffDate:
         pytest.importorskip("sklearn")
         from src.ml.train import training_cutoff_date
 
-        # 10 distinct dates, but wildly unbalanced row counts per date.
         dates = pd.to_datetime([f"2024-01-{d:02d}" for d in range(1, 11)])
         rows = []
         for i, d in enumerate(dates):
             rows.extend([d] * (100 if i == 0 else 1))
         df = pd.DataFrame({"date": rows})
 
-        # 20% test => cutoff is the 8th of the 10 distinct dates,
-        # regardless of the row imbalance.
         assert training_cutoff_date(df, 0.2) == dates[7]
 
     def test_cutoff_rejects_empty_input(self):

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 scripts/enrich_ticker_names.py
 
@@ -30,7 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.utils.config import load_config  # noqa: E402
+from src.utils.config import load_config
 
 
 def fetch_company_name(symbol: str, suffix: str) -> str:
@@ -83,7 +82,6 @@ def main() -> int:
             df.at[i, "company_name"] = symbol
             print(f"[{i + 1:>3}/{total}] {symbol:<14} -> (no name, using symbol)")
 
-        # Write incrementally so an interrupted run isn't wasted.
         df.to_csv(path, index=False)
         time.sleep(args.sleep)
 

@@ -78,8 +78,6 @@ def s3a_path(bucket: str, key_prefix: str) -> str:
 
 
 if __name__ == "__main__":
-    # Quick smoke test: reads nothing, just confirms the session builds
-    # and S3A jars resolve correctly.
     spark = get_spark_session()
     print("Spark version:", spark.version)
     print("Session created successfully with S3A support.")

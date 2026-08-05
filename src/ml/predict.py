@@ -37,8 +37,6 @@ logger = logging.getLogger("equirisk.ml.predict")
 PREDICTIONS_KEY = predictions_key()
 
 
-
-
 def load_model_bundle(version: str, bucket: str) -> dict:
     """Loads the {model, scaler, features, labels} bundle train.py saved."""
     model_bytes = get_bytes(model_key(version, "model.pkl"), bucket)

@@ -71,11 +71,6 @@ def _run_stage(name: str, fn: Callable, status_callback: Optional[Callable] = No
         return StageResult(name=name, success=False, duration_sec=duration, message=str(e))
 
 
-# ---------------------------------------------------------------------
-# Stage wrappers -- replace bodies with real imports once each module
-# in src/ingestion, src/etl, src/ml, src/rag exists.
-# ---------------------------------------------------------------------
-
 def stage_ingest_prices():
     from src.ingestion.fetch_prices import fetch_all_tickers_prices
     fetch_all_tickers_prices()
@@ -115,10 +110,6 @@ def stage_rag_refresh():
     from src.rag.build_index import refresh_all_indices
     refresh_all_indices()
 
-
-# ---------------------------------------------------------------------
-# Public entrypoint
-# ---------------------------------------------------------------------
 
 def run_full_pipeline(status_callback: Optional[Callable] = None) -> PipelineRunResult:
     """Runs all stages in order. status_callback(str) is optional --

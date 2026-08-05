@@ -19,7 +19,7 @@ pytest.importorskip("sklearn", reason="scikit-learn not installed")
 pytest.importorskip("xgboost", reason="xgboost not installed")
 pytest.importorskip("lightgbm", reason="lightgbm not installed")
 
-from src.ml.train import FEATURE_COLUMNS, LABEL_COLUMN, prepare_train_test  # noqa: E402
+from src.ml.train import FEATURE_COLUMNS, LABEL_COLUMN, prepare_train_test
 
 
 def _synthetic_feature_table(n_dates: int = 500, n_tickers: int = 5) -> pd.DataFrame:
@@ -74,7 +74,7 @@ class TestChronologicalSplit:
         """No randomness left -- two calls must produce identical splits."""
         df = _synthetic_feature_table()
         a = prepare_train_test(df, 0.2, 42, 30)
-        b = prepare_train_test(df, 0.2, 999, 30)  # different seed, same result
+        b = prepare_train_test(df, 0.2, 999, 30)
         np.testing.assert_array_equal(a[0], b[0])
         np.testing.assert_array_equal(a[2], b[2])
 

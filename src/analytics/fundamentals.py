@@ -36,8 +36,8 @@ def fetch_fundamentals(ticker: str) -> dict:
     return {
         "pe_ratio": info.get("trailingPE"),
         "net_income": info.get("netIncomeToCommon"),
-        "profit_margin": info.get("profitMargins"),  # fraction, e.g. 0.12 = 12%
-        "debt_to_equity": info.get("debtToEquity"),  # yfinance reports this as a percentage-like ratio (e.g. 45.2)
+        "profit_margin": info.get("profitMargins"),
+        "debt_to_equity": info.get("debtToEquity"),
         "market_cap": info.get("marketCap"),
         "sector": info.get("sector"),
     }

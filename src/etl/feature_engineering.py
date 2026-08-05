@@ -23,8 +23,6 @@ from src.utils.config import load_config as _load_config
 logger = logging.getLogger("equirisk.etl.feature_engineering")
 
 
-
-
 def add_returns(df: DataFrame) -> DataFrame:
     """Daily simple return = (close_t - close_t-1) / close_t-1, computed
     per ticker via a lag window ordered by date."""
@@ -105,7 +103,6 @@ def training_cutoff_date(df: DataFrame, test_size: float):
     return dates[idx]
 
 
-
 def add_short_horizon_volatility(df: DataFrame, windows: list = [5, 10, 30]) -> DataFrame:
     """Realised volatility at shorter lookbacks, including one matched to
     the label horizon.
@@ -140,8 +137,6 @@ def add_garman_klass_volatility(df: DataFrame, window_days: int = 20) -> DataFra
     df = df.withColumn("_gk", F.when(valid, gk))
 
     w = Window.partitionBy("ticker").orderBy("date").rowsBetween(-(window_days - 1), 0)
-    # Clamped at zero: the estimator can go slightly negative on a single
-    # day when the open-to-close term dominates a narrow range.
     df = df.withColumn(
         f"garman_klass_vol_{window_days}d",
         F.sqrt(F.greatest(F.avg("_gk").over(w), F.lit(0.0))),
@@ -572,9 +567,6 @@ def add_forward_volatility_label(df: DataFrame, horizon_days: int, buckets: list
     ).drop("forward_volatility_raw", "forward_window_rows")
 
     if mode.startswith("cross_sectional"):
-        # percent_rank within each date: 0.0 = lowest forward vol that day,
-        # 1.0 = highest. Nulls sort out of the ranking automatically because
-        # they are filtered before the window is applied.
         w_date = Window.partitionBy("date").orderBy("forward_volatility")
         df = df.withColumn(
             "forward_volatility_rank",
@@ -584,22 +576,6 @@ def add_forward_volatility_label(df: DataFrame, horizon_days: int, buckets: list
         rank = F.col("forward_volatility_rank")
 
         if mode == "cross_sectional_binary":
-            # Two classes, with the ambiguous middle band DROPPED (labelled
-            # null, so prepare_train_test's dropna removes it).
-            #
-            # The three-class version spends much of its error budget on the
-            # tercile boundaries: a stock at rank 0.33 and one at 0.34 have
-            # essentially identical volatility and receive different labels,
-            # so those rows are close to coin flips no matter how good the
-            # features are. That is irreducible label noise, not model
-            # weakness.
-            #
-            # Removing the middle band asks the question a risk dashboard
-            # actually needs answered -- "is this clearly risky or clearly
-            # safe?" -- and discards the rows where no honest answer exists.
-            # It is a legitimate reframing, but the baseline moves from 1/3
-            # to 1/2 and BOTH must be reported for the numbers to mean
-            # anything.
             bucket_expr = (
                 F.when(rank.isNull(), None)
                 .when(rank < tail_fraction, buckets[0])
@@ -615,6 +591,22 @@ def add_forward_volatility_label(df: DataFrame, horizon_days: int, buckets: list
             return df.withColumn("risk_label", bucket_expr)
 
         n = len(buckets)
+
+        if n == 2:
+            bucket_expr = (
+                F.when(rank.isNull(), None)
+                 .when(rank < 1.0 / 3, buckets[0])
+                 .when(rank >= 2.0 / 3, buckets[-1])
+                 .otherwise(None)
+            )
+            logger.info(
+                "Risk label: CROSS-SECTIONAL BINARY. Bottom tercile -> "
+                f"{buckets[0]}, top tercile -> {buckets[-1]}, middle tercile "
+                "DROPPED as ambiguous (training set shrinks by ~1/3). "
+                "Baseline accuracy is 50.0% -- report it alongside the score."
+            )
+            return df.withColumn("risk_label", bucket_expr)
+
         bucket_expr = F.when(rank.isNull(), None)
         for i in range(n - 1):
             bucket_expr = bucket_expr.when(rank < (i + 1) / n, buckets[i])
@@ -628,7 +620,6 @@ def add_forward_volatility_label(df: DataFrame, horizon_days: int, buckets: list
         )
         return df.withColumn("risk_label", bucket_expr)
 
-    # --- absolute mode ---
     cutoff = training_cutoff_date(df, test_size)
     train_only = df.filter(F.col("date") <= F.lit(cutoff))
 
@@ -679,16 +670,12 @@ def run_feature_engineering(config_path: str = None) -> None:
         df = add_rsi(df)
         df = add_macd(df)
 
-        # Derived features. Order matters: each of these reads columns the
-        # block above produced.
         df = add_price_relative_features(df, fe_config["rolling_windows_days"])
         df = add_range_volatility(df)
         df = add_volatility_term_structure(df)
         df = add_volume_features(df)
         df = add_market_regime_features(df)
 
-        # Wave 2. Order matters -- several read columns produced above
-        # (vol_of_vol needs volatility_20d, extreme moves need volatility_90d).
         df = add_short_horizon_volatility(df)
         df = add_garman_klass_volatility(df)
         df = add_volatility_of_volatility(df)
@@ -701,7 +688,6 @@ def run_feature_engineering(config_path: str = None) -> None:
         df = add_market_sensitivity(df)
         df = add_extreme_move_features(df)
 
-        # Wave 3 -- must come last: ranks the wave-2 columns.
         df = add_cross_sectional_rank_features(df)
         df = add_rank_persistence_features(df)
         df = add_forward_volatility_label(
